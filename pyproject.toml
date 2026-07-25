@@ -1,0 +1,51 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "go-daddy-skill"
+version = "0.1.0"
+description = "Read-first GoDaddy domain inventory and guarded DNS TXT CLI for AI agents"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "GoDaddy Skill contributors"}]
+keywords = ["godaddy", "domains", "dns", "agent-skill", "inventory"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Internet :: Name Service (DNS)",
+]
+dependencies = [
+  "dnspython>=2.7,<3",
+  "idna>=3.7,<4",
+  "requests>=2.32,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<9",
+  "ruff>=0.9,<1",
+]
+
+[project.scripts]
+go-daddy-skill = "go_daddy_skill.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/go_daddy_skill"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+markers = ["live: opt-in tests against the production GoDaddy API"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]

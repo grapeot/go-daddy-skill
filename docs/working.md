@@ -17,6 +17,8 @@
 - Added live NS resolution as a mandatory write precondition and kept delete/update operations outside the CLI.
 - Expanded the offline suite to 28 tests and updated the public product, safety, and agent contracts.
 - Completed an explicitly authorized production TXT acceptance test: plan and apply preconditions passed, GoDaddy returned and read-back verified the opaque record ID, and both authoritative nameservers served the expected value. The record was intentionally left for manual cleanup; no production identifiers are stored in tracked files.
+- Generalized the create-only safety boundary to an explicit DNS type allowlist. Plan and apply remain dry-run by default; only `--execute` writes, and non-TXT records require exact canonical record confirmation after explicit user authorization.
+- Added credential-free GitHub Actions CI for Ruff, offline tests, and bytecode compilation.
 
 ## Lessons Learned
 

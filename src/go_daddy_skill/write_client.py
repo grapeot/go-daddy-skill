@@ -7,7 +7,7 @@ from urllib.parse import quote
 import requests
 
 from .client import PRODUCTION_ORIGIN, GoDaddyAPIError, normalize_domain, redact
-from .plan import build_txt_create_plan
+from .plan import build_dns_create_plan
 
 
 class GoDaddyDNSWriteClient:
@@ -27,15 +27,11 @@ class GoDaddyDNSWriteClient:
         self._session = session or requests.Session()
         self._timeout = timeout
 
-    def create_txt_record(self, zone: str, record: dict[str, Any]) -> dict[str, Any]:
+    def create_record(self, zone: str, record: dict[str, Any]) -> dict[str, Any]:
         normalized = normalize_domain(zone)
-        if set(record) != {"type", "name", "data", "ttl"} or record.get("type") != "TXT":
-            raise ValueError("The first write increment supports TXT records only")
-        validated = build_txt_create_plan(
+        validated = build_dns_create_plan(
             normalized,
-            record.get("name"),
-            record.get("data"),
-            record.get("ttl"),
+            record,
             existing_records=[],
         )["record"]
         path = f"/v3/domains/zones/{quote(normalized, safe='.-')}/dns-records"
@@ -47,7 +43,7 @@ class GoDaddyDNSWriteClient:
                 "Accept": "application/json",
                 "Authorization": f"Bearer {self._token}",
                 "Content-Type": "application/json",
-                "User-Agent": "go-daddy-skill/0.1.0",
+                "User-Agent": "go-daddy-skill/0.2.0",
                 "X-Request-Id": request_id,
             },
             timeout=self._timeout,
@@ -85,3 +81,8 @@ class GoDaddyDNSWriteClient:
         if not isinstance(body.get("recordId"), str):
             raise ValueError("GoDaddy create response did not include recordId")
         return {"record": body, "headers": headers, "request_id": request_id}
+
+    def create_txt_record(self, zone: str, record: dict[str, Any]) -> dict[str, Any]:
+        if record.get("type") != "TXT":
+            raise ValueError("create_txt_record accepts TXT records only")
+        return self.create_record(zone, record)

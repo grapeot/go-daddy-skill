@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "go-daddy-skill"
-version = "0.1.0"
-description = "Read-first GoDaddy domain inventory and guarded DNS TXT CLI for AI agents"
+version = "0.2.0"
+description = "Read-first GoDaddy domain inventory and guarded DNS create CLI for AI agents"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}

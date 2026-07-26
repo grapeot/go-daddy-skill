@@ -1,21 +1,24 @@
 ---
 name: godaddy-domain-management
-description: Read-first GoDaddy domain inventory, authoritative DNS retrieval, and guarded TXT creation through a least-privilege CLI. Use for owned-domain lists, expiration and protection review, nameserver inspection, DNS inventory, or an explicitly authorized TXT create. Do not use for purchases, transfers, nameserver changes, updates, or deletes.
+description: Read-first GoDaddy domain inventory, authoritative DNS retrieval, and guarded dry-run-first DNS record creation through a least-privilege CLI. Use for owned-domain lists, expiration and protection review, nameserver inspection, DNS inventory, or an explicitly authorized DNS create. Do not use for purchases, transfers, nameserver changes, updates, replacements, or deletes.
 ---
 
 # GoDaddy Domain Management
 
 ## Goal
 
-Produce a complete or explicitly incomplete machine-readable inventory of domains visible to a GoDaddy account and records from GoDaddy-hosted authoritative DNS zones. When the user explicitly authorizes a named change, create one TXT record through a reviewable plan/apply boundary.
+Produce a complete or explicitly incomplete machine-readable inventory of domains visible to a GoDaddy account and records from GoDaddy-hosted authoritative DNS zones. When the user explicitly authorizes a named change, create one supported DNS record through a reviewable plan/apply boundary.
 
 ## Boundaries
 
 - General inventory operations are structurally read-only.
 - Read credentials must come from `GODADDY_PAT`, never arguments or prompts. This PAT should contain only `domains.domain:read`.
-- TXT apply credentials must come from a separate `GODADDY_WRITE_PAT` with `domains.domain:read` and `domains.dns:update`.
-- Never apply a plan without explicit user authorization for that exact zone and intended TXT record.
-- TXT create is the only mutation. Do not use this skill for update, delete, nameserver, purchase, transfer, contact, or generic API operations.
+- Apply credentials must come from a separate `GODADDY_WRITE_PAT` with `domains.domain:read` and `domains.dns:update`.
+- Never execute a plan without explicit user authorization for the exact zone, type, name, data, TTL, and type-specific fields.
+- Create is the only mutation. Supported types are `A`, `AAAA`, `CAA`, `CNAME`, `MX`, `NS`, `SRV`, and `TXT`; `SOA` is deliberately excluded.
+- Both plan and apply default to dry-run. Only `apply --execute` may write.
+- For every non-TXT record, show the dry-run output to the user, ask for explicit authorization, and copy the exact `required_confirm_record` into `--confirm-record`.
+- Do not use this skill for update, replace, delete, nameserver, purchase, transfer, contact, or generic API operations.
 - Do not request or expose contacts or transfer auth codes.
 - A domain registered at GoDaddy may use another authoritative DNS provider. In that case, GoDaddy cannot supply a trustworthy live-zone inventory.
 - A broken CNAME target is not, by itself, proof that a third party can claim the hostname.
@@ -44,10 +47,15 @@ uv pip install -e '.[dev]'
 .venv/bin/go-daddy-skill dns list example.com
 .venv/bin/go-daddy-skill dns list example.com --type CNAME
 .venv/bin/go-daddy-skill dns create plan example.com \
-  --name _agent-verification --data verification=synthetic --ttl 600 \
+  --type A --name app --data 192.0.2.10 --ttl 600 \
   --output plans/example-create.json
 .venv/bin/go-daddy-skill dns create apply plans/example-create.json \
   --confirm-domain example.com
+# After showing the dry-run and receiving exact user authorization:
+.venv/bin/go-daddy-skill dns create apply plans/example-create.json \
+  --confirm-domain example.com \
+  --confirm-record '{"data":"192.0.2.10","name":"app","ttl":600,"type":"A"}' \
+  --execute
 ```
 
 All successful commands emit one JSON object on stdout. Provider and validation failures emit a JSON error on stderr with status, redacted body, path, request ID, and relevant rate-limit headers.
@@ -75,7 +83,7 @@ Start with `domains list` to establish account-visible scope. Inspect each domai
 
 Treat expiration, auto-renew, lock, privacy, and nameserver fields as operational evidence rather than assumptions. Preserve the retrieval timestamp and completeness metadata in any durable report.
 
-For a TXT write, plan first and inspect the plan's zone, record, expiration, and digest. Plans contain TXT data in plaintext and should remain in the ignored `plans/` directory. Apply only after confirming that the authorization still covers the exact operation. Plan and apply both require matching account/live nameservers; apply also rechecks duplicate state, sends one non-retried POST, and verifies the returned `recordId`. If the outcome is uncertain, read current state and do not rerun apply blindly.
+For a write, plan first and inspect the plan's zone, record, expiration, digest, and authorization block. Plans contain record data in plaintext and should remain in the ignored `plans/` directory. A plain apply is another dry-run and must not write. Execute only after confirming that the authorization still covers the exact operation. Non-TXT execute requires the plan's exact `required_confirm_record`. Plan and apply both require matching account/live nameservers; execute also rechecks duplicate state, sends one non-retried POST, and verifies the returned `recordId`. If the outcome is uncertain, read current state and do not rerun blindly.
 
 ## Failure Interpretation
 

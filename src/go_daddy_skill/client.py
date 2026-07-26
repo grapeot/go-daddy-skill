@@ -109,7 +109,7 @@ class GoDaddyClient:
             headers={
                 "Accept": "application/json",
                 "Authorization": f"Bearer {self._token}",
-                "User-Agent": "go-daddy-skill/0.1.0",
+                "User-Agent": "go-daddy-skill/0.2.0",
                 "X-Request-Id": request_id,
             },
             timeout=self._timeout,

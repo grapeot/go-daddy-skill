@@ -11,14 +11,19 @@ import requests
 
 from .authority import AuthorityError, require_matching_authority, resolve_nameservers
 from .client import SCHEMA, GoDaddyAPIError, GoDaddyClient, GoDaddyProtocolError
-from .plan import build_txt_create_plan, validate_txt_create_plan
+from .plan import (
+    build_dns_create_plan,
+    record_confirmation,
+    records_are_identical,
+    validate_dns_create_plan,
+)
 from .write_client import GoDaddyDNSWriteClient
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="go-daddy-skill",
-        description="Read-first GoDaddy inventory with guarded DNS TXT creation.",
+        description="Read-first GoDaddy inventory with guarded, dry-run-first DNS creation.",
     )
     parser.add_argument("--pretty", action="store_true", help="Indent JSON output")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -45,19 +50,36 @@ def _parser() -> argparse.ArgumentParser:
     dns_list.add_argument("--name")
     dns_list.add_argument("--page-size", type=int, default=100)
     dns_list.add_argument("--max-items", type=int)
-    dns_create = dns_commands.add_parser("create", help="Plan or apply a TXT record create")
+    dns_create = dns_commands.add_parser("create", help="Plan or execute a DNS record create")
     dns_create_commands = dns_create.add_subparsers(dest="dns_create_command", required=True)
-    create_plan = dns_create_commands.add_parser("plan", help="Create an immutable TXT write plan")
+    create_plan = dns_create_commands.add_parser(
+        "plan", help="Dry-run and create an immutable DNS write plan"
+    )
     create_plan.add_argument("domain")
+    create_plan.add_argument("--type", dest="record_type", required=True)
     create_plan.add_argument("--name", required=True)
     create_plan.add_argument("--data", required=True)
     create_plan.add_argument("--ttl", type=int, default=600)
+    create_plan.add_argument("--priority", type=int)
+    create_plan.add_argument("--weight", type=int)
+    create_plan.add_argument("--port", type=int)
+    create_plan.add_argument("--service")
+    create_plan.add_argument("--protocol")
     create_plan.add_argument("--output", required=True)
     create_apply = dns_create_commands.add_parser(
-        "apply", help="Apply one unexpired TXT write plan"
+        "apply", help="Revalidate a plan; only --execute performs the write"
     )
     create_apply.add_argument("plan")
     create_apply.add_argument("--confirm-domain", required=True)
+    create_apply.add_argument(
+        "--confirm-record",
+        help="Exact required_confirm_record from a non-TXT dry-run",
+    )
+    create_apply.add_argument(
+        "--execute",
+        action="store_true",
+        help="Perform the one-shot create after explicit user authorization",
+    )
     return parser
 
 
@@ -111,16 +133,37 @@ def _domain_nameservers(detail: dict[str, Any]) -> list[str]:
     return values
 
 
+def _record_from_plan_args(args: argparse.Namespace) -> dict[str, Any]:
+    record: dict[str, Any] = {
+        "type": args.record_type,
+        "name": args.name,
+        "data": args.data,
+        "ttl": args.ttl,
+    }
+    for field in ("priority", "weight", "port", "service", "protocol"):
+        value = getattr(args, field)
+        if value is not None:
+            record[field] = value
+    return record
+
+
+def _identical_record_exists(
+    records: list[dict[str, Any]], target: dict[str, Any]
+) -> bool:
+    return any(records_are_identical(record, target) for record in records)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
     command = _command_name(args)
     token = os.environ.get("GODADDY_PAT", "")
     write_token = os.environ.get("GODADDY_WRITE_PAT", "")
-    active_token = write_token if command == "dns.create.apply" else token
+    execute = command == "dns.create.apply" and args.execute
+    active_token = write_token if execute else token
 
     try:
-        if command == "dns.create.apply" and (
+        if execute and (
             not write_token.strip()
             or any(character.isspace() for character in write_token)
             or ":" in write_token
@@ -154,16 +197,14 @@ def main(argv: list[str] | None = None) -> int:
             )
             existing, meta = client.list_dns_records(
                 args.domain,
-                record_type="TXT",
+                record_type=args.record_type.upper(),
                 name=args.name,
             )
             if not meta["complete"]:
-                raise GoDaddyProtocolError("Existing TXT record inventory is incomplete")
-            plan = build_txt_create_plan(
+                raise GoDaddyProtocolError("Existing DNS record inventory is incomplete")
+            plan = build_dns_create_plan(
                 args.domain,
-                args.name,
-                args.data,
-                args.ttl,
+                _record_from_plan_args(args),
                 existing_records=existing,
             )
             output = Path(args.output)
@@ -174,7 +215,13 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError(f"Unable to write DNS plan: {exc}") from exc
             result = _success(
                 command,
-                {"plan": plan, "output": str(output)},
+                {
+                    "dry_run": True,
+                    "would_create": plan["record"],
+                    "authorization": plan["authorization"],
+                    "plan": plan,
+                    "output": str(output),
+                },
                 {"complete": True, "requests": client.request_count},
             )
         elif command == "dns.create.apply":
@@ -183,42 +230,60 @@ def main(argv: list[str] | None = None) -> int:
                 plan_document = json.loads(plan_path.read_text(encoding="utf-8"))
             except OSError as exc:
                 raise ValueError(f"Unable to read DNS plan: {exc}") from exc
-            plan = validate_txt_create_plan(
+            plan = validate_dns_create_plan(
                 plan_document,
                 confirm_domain=args.confirm_domain,
             )
+            if args.execute and plan["record"]["type"] != "TXT":
+                required = record_confirmation(plan["record"])
+                if args.confirm_record != required:
+                    raise ValueError(
+                        "Non-TXT execution requires the exact required_confirm_record "
+                        "value from the dry-run"
+                    )
             detail = client.get_domain(plan["zone"])
             require_matching_authority(
                 _domain_nameservers(detail), resolve_nameservers(plan["zone"])
             )
             existing, meta = client.list_dns_records(
                 plan["zone"],
-                record_type="TXT",
+                record_type=plan["record"]["type"],
                 name=plan["record"]["name"],
             )
             if not meta["complete"]:
-                raise GoDaddyProtocolError("Pre-apply TXT record inventory is incomplete")
-            if any(
-                str(record.get("type", "")).upper() == "TXT"
-                and str(record.get("name", "")).lower()
-                == plan["record"]["name"].lower()
-                and record.get("data") == plan["record"]["data"]
-                for record in existing
-            ):
-                raise ValueError("An identical TXT record appeared after planning")
-            created = GoDaddyDNSWriteClient(write_token).create_txt_record(
+                raise GoDaddyProtocolError("Pre-apply DNS record inventory is incomplete")
+            if _identical_record_exists(existing, plan["record"]):
+                raise ValueError("An identical DNS record appeared after planning")
+            if not args.execute:
+                result = _success(
+                    command,
+                    {
+                        "dry_run": True,
+                        "ready_to_execute": True,
+                        "would_create": plan["record"],
+                        "authorization": plan["authorization"],
+                        "instruction": (
+                            "No DNS mutation was performed. Obtain explicit user authorization "
+                            "for this exact record, then rerun this apply command with --execute."
+                        ),
+                    },
+                    {"complete": True, "plan_digest": plan["digest"]},
+                )
+                _dump(result, pretty=args.pretty)
+                return 0
+            created = GoDaddyDNSWriteClient(write_token).create_record(
                 plan["zone"], plan["record"]
             )
             verified, verify_meta = client.list_dns_records(
                 plan["zone"],
-                record_type="TXT",
+                record_type=plan["record"]["type"],
                 name=plan["record"]["name"],
             )
             record_id = created["record"]["recordId"]
             matched = any(record.get("recordId") == record_id for record in verified)
             if not verify_meta["complete"] or not matched:
                 raise GoDaddyProtocolError(
-                    "TXT record was created but post-write API verification failed"
+                    "DNS record was created but post-write API verification failed"
                 )
             result = _success(
                 command,

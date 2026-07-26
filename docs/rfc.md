@@ -2,7 +2,7 @@
 
 ## Decision Summary
 
-The general client is a handwritten, GET-only transport over three GoDaddy endpoint families. A separate transport exposes exactly one non-retried TXT create POST. The project does not generate a broad SDK, wrap the beta official CLI, or expose arbitrary HTTP paths. This keeps the callable surface smaller than either credential's possible permissions.
+The general client is a handwritten, GET-only transport over three GoDaddy endpoint families. A separate transport exposes exactly one non-retried, allowlisted DNS create POST. The project does not generate a broad SDK, wrap the beta official CLI, or expose arbitrary HTTP paths. This keeps the callable surface smaller than either credential's possible permissions.
 
 ## Upstream Contract
 
@@ -13,7 +13,7 @@ The general client is a handwritten, GET-only transport over three GoDaddy endpo
 | GoDaddy zone records | `GET /v3/domains/zones/{zone}/dns-records` | `page`, `pageSize`, and links |
 | Create one DNS record | `POST /v3/domains/zones/{zone}/dns-records` | none; success is `201` with `recordId` |
 
-Reads require `domains.domain:read`. TXT apply uses a separate PAT with `domains.domain:read` and `domains.dns:update`. V3 requires PAT authentication. Legacy `sso-key` credentials are intentionally unsupported.
+Reads require `domains.domain:read`. Execute uses a separate PAT with `domains.domain:read` and `domains.dns:update`. V3 requires PAT authentication. Legacy `sso-key` credentials are intentionally unsupported.
 
 Exact schemas come from the official [v1 OpenAPI](https://developer.godaddy.com/openapi/domains-v1.json) and [v3 OpenAPI](https://developer.godaddy.com/openapi/domains-v3.json). Behavioral constraints come from the official [authentication](https://developer.godaddy.com/en/docs/api-users/auth), [pagination](https://developer.godaddy.com/en/docs/api-users/pagination), and [domain-management](https://developer.godaddy.com/en/docs/api-users/domain-management-concepts) guides.
 
@@ -25,7 +25,7 @@ The CLI reads `GODADDY_PAT` for normal reads and `GODADDY_WRITE_PAT` for apply-t
 
 ### Network
 
-The public CLI always targets `https://api.godaddy.com`. Redirects are not followed. General requests pass through a GET path allowlist. The independent write transport has no generic request method and constructs only `POST /v3/domains/zones/{normalized-zone}/dns-records` with a TXT body.
+The public CLI always targets `https://api.godaddy.com`. Redirects are not followed. General requests pass through a GET path allowlist. The independent write transport has no generic request method and constructs only `POST /v3/domains/zones/{normalized-zone}/dns-records` with a validated, allowlisted create body.
 
 Tests inject a fake session into the library. No public `--base-url` option exists because forwarding a Bearer token to a caller-selected origin would create a credential-exfiltration primitive.
 
@@ -39,11 +39,11 @@ An account-visible domain proves only that GoDaddy exposes a registrar-managemen
 
 The CLI therefore provides primitive reads and preserves nameservers, but does not label an externally delegated zone as empty. Callers must inspect authoritative nameservers before interpreting `dns list`. TXT plan and apply resolve live NS records and require their canonical set to exactly equal the account domain detail. DNS failure, missing account nameservers, or drift fails closed.
 
-## TXT Plan And Apply
+## DNS Plan, Dry-run Apply, And Execute
 
-`dns create plan` reads domain detail and the matching TXT-name slice, checks authority and duplicate state, then writes a canonical JSON plan. The plan contains a UUID, action, zone, record body, preconditions, creation time, 30-minute expiration, and a SHA-256 digest over every field except the digest itself. The digest catches accidental or manual changes; it is not a signature against an attacker who can modify local code and files. Plan files contain TXT data in plaintext and belong in the ignored `plans/` directory.
+`dns create plan` reads domain detail and the matching type/name slice, checks authority and duplicate state, then writes a canonical JSON plan. The plan contains a UUID, action, zone, record body, preconditions, authorization instructions, creation time, 30-minute expiration, and a SHA-256 digest over every field except the digest itself. The digest catches accidental or manual changes; it is not a signature against an attacker who can modify local code and files. Plan files contain record data in plaintext and belong in the ignored `plans/` directory.
 
-`dns create apply` uses only `GODADDY_WRITE_PAT`. It validates the plan digest, expiration, TXT-only shape, and exact `--confirm-domain`. It then repeats domain-detail, live-authority, complete record-list, and identical-record checks. Only after those gates does the write transport send one POST. The client does not retry because record creation is non-idempotent.
+`dns create apply` defaults to dry-run and uses the read token. It validates the plan digest, expiration, allowlisted record shape, and exact `--confirm-domain`, then repeats domain-detail, live-authority, complete record-list, and identical-record checks. Only `apply --execute` uses `GODADDY_WRITE_PAT` and sends one POST after those gates. Every dry-run tells the agent to obtain exact user authorization; non-TXT execute additionally checks the canonical record JSON supplied through `--confirm-record`. The client does not retry because record creation is non-idempotent.
 
 GoDaddy must return `201` and a string `recordId`. Apply performs a fresh filtered read and succeeds only when that opaque ID appears. If the POST outcome or verification is uncertain, the command reports failure and the operator must inspect current state; automatic resubmission is forbidden.
 
@@ -102,4 +102,4 @@ Add bounded CNAME traversal, loop detection, A/AAAA terminal checks, and authori
 
 ### Additional writes
 
-Deletes, updates, arbitrary record types, nameserver changes, purchases, transfers, and contacts remain outside this increment. Adding any of them requires a new threat analysis rather than generalizing the TXT transport.
+Deletes, updates, replacements, SOA creation, arbitrary record types, nameserver changes, purchases, transfers, and contacts remain outside this increment. Adding any of them requires a new threat analysis rather than generalizing the create transport.

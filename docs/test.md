@@ -14,7 +14,9 @@ Required coverage:
 - Recursive redaction in success and error bodies.
 - Stable success and error envelopes.
 - Exit-code mapping for authentication, authorization, provider, and protocol failures.
-- Plan digest, expiration, domain confirmation, TXT validation, and duplicate rejection.
+- Plan digest, expiration, domain confirmation, type-specific validation, and duplicate rejection.
+- Apply defaults to zero-write dry-run; execute requires a write token.
+- Non-TXT execute requires exact canonical-record confirmation.
 - One-shot POST behavior, fixed origin, redirect rejection, and required `recordId`.
 
 Run:
@@ -38,7 +40,7 @@ Live tests may only call the same approved GET paths. They must not print domain
 
 ## Live Mutation Boundary
 
-The default and opt-in pytest suites never mutate DNS. A live TXT create is a case-specific CLI acceptance test requiring a separately scoped `GODADDY_WRITE_PAT`, explicit user authorization for the named zone and record, an expiring plan, and manual cleanup. Never place a production domain or returned record in fixtures or logs.
+The default and opt-in pytest suites never mutate DNS. A live DNS create is a case-specific CLI acceptance test requiring a separately scoped `GODADDY_WRITE_PAT`, explicit user authorization for the exact zone and record, an expiring plan, `--execute`, non-TXT exact confirmation, and manual cleanup coordinates. Never place a production domain or returned record in fixtures or logs.
 
 ## Publication Privacy Check
 

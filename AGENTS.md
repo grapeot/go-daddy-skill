@@ -2,9 +2,9 @@
 
 ## Project Role
 
-This repository provides an independent, read-first CLI and agent skill for inventorying domains visible to a GoDaddy account, reading GoDaddy-hosted DNS zones, and performing one guarded TXT-record create operation.
+This repository provides an independent, read-first CLI and agent skill for inventorying domains visible to a GoDaddy account, reading GoDaddy-hosted DNS zones, and performing guarded DNS-record create operations.
 
-It is not an official GoDaddy product, a registrar automation tool, or an arbitrary API proxy. The only mutation path is an explicit, expiring plan/apply workflow for TXT creation.
+It is not an official GoDaddy product, a registrar automation tool, or an arbitrary API proxy. The only mutation path is an explicit, expiring, dry-run-first plan/apply workflow for supported DNS record creation.
 
 ## Structure
 
@@ -30,7 +30,9 @@ uv pip install -e '.[dev]'
 - Keep DNS writes in the separate narrow transport. It may issue one non-retried `POST` only to the approved v3 DNS-record path.
 - Read credentials only from `GODADDY_PAT` and `GODADDY_WRITE_PAT`; never accept tokens as CLI arguments.
 - Require a digest-checked, 30-minute plan, exact domain confirmation, matching account/live nameservers, conflict revalidation, and record-ID verification for every write.
-- Support TXT creation only. Do not add update, delete, nameserver, purchase, transfer, contact, or arbitrary API operations.
+- Support create only for the explicit record-type allowlist in `plan.py`. Do not add SOA, update, replace, delete, nameserver, purchase, transfer, contact, or arbitrary API operations.
+- `dns create plan` and `dns create apply` must remain dry-run by default. A provider write requires `apply --execute`.
+- Every dry-run must state that the agent needs explicit user authorization for the exact record before execute. Non-TXT execution additionally requires the exact `--confirm-record` value emitted by the plan.
 - Never request, print, cache, or fixture WHOIS contacts or domain transfer auth codes.
 - Keep the production origin pinned to `https://api.godaddy.com` in the public CLI.
 - Preserve provider HTTP status, request identifiers, rate-limit headers, and redacted response bodies in errors.

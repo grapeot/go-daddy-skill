@@ -68,6 +68,19 @@ def test_create_a_is_one_non_retrying_pinned_post():
     assert len(session.calls) == 1
 
 
+def test_create_accepts_201_without_record_id_for_readback_reconciliation():
+    session = FakeSession([FakeResponse(201, {})])
+    client = GoDaddyDNSWriteClient("write-token", session=session)
+
+    result = client.create_record(
+        "example.com",
+        {"type": "CNAME", "name": "app", "data": "target.example.net.", "ttl": 600},
+    )
+
+    assert result["record"] == {}
+    assert len(session.calls) == 1
+
+
 def test_write_client_rejects_extra_body_fields():
     client = GoDaddyDNSWriteClient("write-token", session=FakeSession([]))
 

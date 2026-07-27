@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from go_daddy_skill import cli
+from go_daddy_skill.client import GoDaddyProtocolError
 from go_daddy_skill.plan import build_dns_create_plan, record_confirmation
 
 
@@ -97,6 +100,24 @@ def _write_a_plan(tmp_path):
     path = tmp_path / "a-create.json"
     path.write_text(json.dumps(plan), encoding="utf-8")
     return path, plan
+
+
+def test_post_write_reconciliation_accepts_unique_exact_readback_without_response_id():
+    target = {"type": "CNAME", "name": "app", "data": "target.example.net.", "ttl": 600}
+    verified = {**target, "recordId": "readback-id"}
+
+    assert cli._verified_created_record({"record": {}}, [verified], target) == verified
+
+
+def test_post_write_reconciliation_rejects_ambiguous_exact_readback():
+    target = {"type": "CNAME", "name": "app", "data": "target.example.net.", "ttl": 600}
+    records = [
+        {**target, "recordId": "first-id"},
+        {**target, "recordId": "second-id"},
+    ]
+
+    with pytest.raises(GoDaddyProtocolError, match="not unique"):
+        cli._verified_created_record({"record": {}}, records, target)
 
 
 def test_apply_is_zero_write_dry_run_by_default(monkeypatch, tmp_path, capsys):

@@ -153,6 +153,29 @@ def _identical_record_exists(
     return any(records_are_identical(record, target) for record in records)
 
 
+def _verified_created_record(
+    created: dict[str, Any],
+    records: list[dict[str, Any]],
+    target: dict[str, Any],
+) -> dict[str, Any]:
+    response_record_id = created["record"].get("recordId")
+    if isinstance(response_record_id, str):
+        matches = [
+            record
+            for record in records
+            if record.get("recordId") == response_record_id
+            and records_are_identical(record, target)
+        ]
+    else:
+        matches = [record for record in records if records_are_identical(record, target)]
+
+    if len(matches) != 1 or not isinstance(matches[0].get("recordId"), str):
+        raise GoDaddyProtocolError(
+            "DNS record was created but post-write API verification was not unique"
+        )
+    return matches[0]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
@@ -279,16 +302,16 @@ def main(argv: list[str] | None = None) -> int:
                 record_type=plan["record"]["type"],
                 name=plan["record"]["name"],
             )
-            record_id = created["record"]["recordId"]
-            matched = any(record.get("recordId") == record_id for record in verified)
-            if not verify_meta["complete"] or not matched:
+            if not verify_meta["complete"]:
                 raise GoDaddyProtocolError(
                     "DNS record was created but post-write API verification failed"
                 )
+            verified_record = _verified_created_record(created, verified, plan["record"])
+            record_id = verified_record["recordId"]
             result = _success(
                 command,
                 {
-                    "created": created["record"],
+                    "created": verified_record,
                     "verified": True,
                     "cleanup": {
                         "zone": plan["zone"],

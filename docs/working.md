@@ -20,6 +20,12 @@
 - Generalized the create-only safety boundary to an explicit DNS type allowlist. Plan and apply remain dry-run by default; only `--execute` writes, and non-TXT records require exact canonical record confirmation after explicit user authorization.
 - Added credential-free GitHub Actions CI for Ruff, offline tests, and bytecode compilation.
 
+### 2026-07-27
+
+- Accepted GoDaddy DNS create responses that return HTTP 201 without a `recordId`, as observed in production for a CNAME create.
+- Preserved fail-closed, non-retrying semantics by requiring the post-write inventory to contain exactly one record matching every planned field, then using its opaque `recordId` as the verified result.
+- Expanded the offline suite to 40 passing tests; Ruff and bytecode compilation also pass.
+
 ## Lessons Learned
 
 - GoDaddy API versions are capability namespaces, not replacements: owned-domain listing remains in v1 while the preferred domain-detail and DNS-record reads are in v3.
@@ -29,4 +35,5 @@
 - A provider page size is a maximum, not a guaranteed row count. Pagination must follow the API continuation signal rather than assuming a short page is terminal.
 - Raw non-JSON provider text cannot be safely key-redacted. V1 reports its type and length but suppresses the body.
 - A DNS create POST is non-idempotent. Unknown outcomes require state inspection, never an automatic retry.
+- Successful create response shapes are not consistent across record types. The authoritative readback, not the POST body alone, is the final verification source.
 - A digest embedded in a plan catches accidental edits but is not a signature against a hostile local actor; local plan storage remains inside the trusted boundary.

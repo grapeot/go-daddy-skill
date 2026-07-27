@@ -78,8 +78,6 @@ class GoDaddyDNSWriteClient:
                 request_id,
                 method="POST",
             )
-        if not isinstance(body.get("recordId"), str):
-            raise ValueError("GoDaddy create response did not include recordId")
         return {"record": body, "headers": headers, "request_id": request_id}
 
     def create_txt_record(self, zone: str, record: dict[str, Any]) -> dict[str, Any]:

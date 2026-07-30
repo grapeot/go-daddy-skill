@@ -28,7 +28,7 @@ uv pip install -e '.[dev]'
 
 - Keep the general client structurally read-only. Its transport may issue only approved `GET` requests.
 - Keep DNS writes in the separate narrow transport. It may issue one non-retried `POST` only to the approved v3 DNS-record path.
-- Read credentials only from `GODADDY_PAT` and `GODADDY_WRITE_PAT`; never accept tokens as CLI arguments.
+- Read credentials only from `GODADDY_PAT` and `GODADDY_WRITE_PAT`; never accept tokens as CLI arguments. `GODADDY_WRITE_PAT` is optional and falls back to `GODADDY_PAT` for execute.
 - Require a digest-checked, 30-minute plan, exact domain confirmation, matching account/live nameservers, conflict revalidation, and record-ID verification for every write.
 - Support create only for the explicit record-type allowlist in `plan.py`. Do not add SOA, update, replace, delete, nameserver, purchase, transfer, contact, or arbitrary API operations.
 - `dns create plan` and `dns create apply` must remain dry-run by default. A provider write requires `apply --execute`.
@@ -50,4 +50,4 @@ Run offline checks before reporting completion:
 .venv/bin/pytest -q
 ```
 
-Live read tests require an explicit gate and a read-only PAT. Live writes require separate case-specific user authorization and a separate write PAT. Publication readiness also requires a privacy scan for real domains, credentials, email addresses, internal paths, and private secret-manager references.
+Live read tests require an explicit gate and a read-capable PAT. Live writes require separate case-specific user authorization; a separate write PAT is optional and the CLI falls back to `GODADDY_PAT` when it is absent. Publication readiness also requires a privacy scan for real domains, credentials, email addresses, internal paths, and private secret-manager references.

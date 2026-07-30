@@ -186,12 +186,21 @@ def main(argv: list[str] | None = None) -> int:
     active_token = write_token if execute else token
 
     try:
-        if execute and (
-            not write_token.strip()
-            or any(character.isspace() for character in write_token)
-            or ":" in write_token
-        ):
-            raise ValueError("GODADDY_WRITE_PAT is missing or malformed")
+        if execute:
+            write_token_invalid = (
+                not write_token.strip()
+                or any(character.isspace() for character in write_token)
+                or ":" in write_token
+            )
+            if write_token_invalid:
+                if not token.strip() or any(
+                    character.isspace() for character in token
+                ) or ":" in token:
+                    raise ValueError(
+                        "GODADDY_WRITE_PAT and GODADDY_PAT are both missing or malformed; "
+                        "set at least one to a GoDaddy PAT with domains.dns:update"
+                    )
+                write_token = token
         client = GoDaddyClient(active_token)
         if command == "auth.status":
             result = _success(command, client.auth_status(live=args.live))

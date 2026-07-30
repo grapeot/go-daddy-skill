@@ -30,7 +30,7 @@ V1 must:
 
 The write increment must:
 
-- Read a separate `GODADDY_WRITE_PAT` with `domains.domain:read` and `domains.dns:update`.
+- Prefer a separate `GODADDY_WRITE_PAT` with `domains.domain:read` and `domains.dns:update`; when it is absent, `--execute` falls back to `GODADDY_PAT`, so a single token with both scopes is sufficient.
 - Create only allowlisted `A`, `AAAA`, `CAA`, `CNAME`, `MX`, `NS`, `SRV`, and `TXT` records through `POST /v3/domains/zones/{zone}/dns-records`.
 - Split every operation into a local plan and a separate apply command.
 - Expire plans after 30 minutes and reject any digest mismatch.

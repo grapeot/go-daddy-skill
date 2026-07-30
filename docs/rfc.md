@@ -21,7 +21,7 @@ Exact schemas come from the official [v1 OpenAPI](https://developer.godaddy.com/
 
 ### Credentials
 
-The CLI reads `GODADDY_PAT` for normal reads and `GODADDY_WRITE_PAT` for apply-time reads and the single write. It has no token flag, interactive login, credential file, or secret-manager-specific code. The surrounding shell or runtime owns secret injection.
+The CLI reads `GODADDY_PAT` for normal reads and prefers `GODADDY_WRITE_PAT` for apply-time reads and the single write; when `GODADDY_WRITE_PAT` is absent, `--execute` falls back to `GODADDY_PAT`. It has no token flag, interactive login, credential file, or secret-manager-specific code. The surrounding shell or runtime owns secret injection.
 
 ### Network
 
@@ -43,7 +43,7 @@ The CLI therefore provides primitive reads and preserves nameservers, but does n
 
 `dns create plan` reads domain detail and the matching type/name slice, checks authority and duplicate state, then writes a canonical JSON plan. The plan contains a UUID, action, zone, record body, preconditions, authorization instructions, creation time, 30-minute expiration, and a SHA-256 digest over every field except the digest itself. The digest catches accidental or manual changes; it is not a signature against an attacker who can modify local code and files. Plan files contain record data in plaintext and belong in the ignored `plans/` directory.
 
-`dns create apply` defaults to dry-run and uses the read token. It validates the plan digest, expiration, allowlisted record shape, and exact `--confirm-domain`, then repeats domain-detail, live-authority, complete record-list, and identical-record checks. Only `apply --execute` uses `GODADDY_WRITE_PAT` and sends one POST after those gates. Every dry-run tells the agent to obtain exact user authorization; non-TXT execute additionally checks the canonical record JSON supplied through `--confirm-record`. The client does not retry because record creation is non-idempotent.
+`dns create apply` defaults to dry-run and uses the read token. It validates the plan digest, expiration, allowlisted record shape, and exact `--confirm-domain`, then repeats domain-detail, live-authority, complete record-list, and identical-record checks. Only `apply --execute` writes, preferring `GODADDY_WRITE_PAT` and falling back to `GODADDY_PAT` when it is absent, then sends one POST after those gates. Every dry-run tells the agent to obtain exact user authorization; non-TXT execute additionally checks the canonical record JSON supplied through `--confirm-record`. The client does not retry because record creation is non-idempotent.
 
 GoDaddy must return `201` and a string `recordId`. Apply performs a fresh filtered read and succeeds only when that opaque ID appears. If the POST outcome or verification is uncertain, the command reports failure and the operator must inspect current state; automatic resubmission is forbidden.
 

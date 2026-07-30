@@ -12,8 +12,8 @@ Produce a complete or explicitly incomplete machine-readable inventory of domain
 ## Boundaries
 
 - General inventory operations are structurally read-only.
-- Read credentials must come from `GODADDY_PAT`, never arguments or prompts. This PAT should contain only `domains.domain:read`.
-- Apply credentials must come from a separate `GODADDY_WRITE_PAT` with `domains.domain:read` and `domains.dns:update`.
+- Read credentials must come from `GODADDY_PAT`, never arguments or prompts. This PAT must have `domains.domain:read`.
+- Apply credentials prefer a separate `GODADDY_WRITE_PAT` with `domains.domain:read` and `domains.dns:update`. When `GODADDY_WRITE_PAT` is absent, `--execute` falls back to `GODADDY_PAT`, so a single token with both read and update scopes is sufficient.
 - Never execute a plan without explicit user authorization for the exact zone, type, name, data, TTL, and type-specific fields.
 - Create is the only mutation. Supported types are `A`, `AAAA`, `CAA`, `CNAME`, `MX`, `NS`, `SRV`, and `TXT`; `SOA` is deliberately excluded.
 - Both plan and apply default to dry-run. Only `apply --execute` may write.

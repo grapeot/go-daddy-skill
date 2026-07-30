@@ -40,7 +40,7 @@ Live tests may only call the same approved GET paths. They must not print domain
 
 ## Live Mutation Boundary
 
-The default and opt-in pytest suites never mutate DNS. A live DNS create is a case-specific CLI acceptance test requiring a separately scoped `GODADDY_WRITE_PAT`, explicit user authorization for the exact zone and record, an expiring plan, `--execute`, non-TXT exact confirmation, and manual cleanup coordinates. Never place a production domain or returned record in fixtures or logs.
+The default and opt-in pytest suites never mutate DNS. A live DNS create is a case-specific CLI acceptance test requiring user authorization for the exact zone and record, an expiring plan, `--execute`, non-TXT exact confirmation, and manual cleanup coordinates. It uses `GODADDY_WRITE_PAT` when present and falls back to `GODADDY_PAT` otherwise. Never place a production domain or returned record in fixtures or logs.
 
 ## Publication Privacy Check
 

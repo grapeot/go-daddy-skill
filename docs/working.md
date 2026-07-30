@@ -20,6 +20,11 @@
 - Generalized the create-only safety boundary to an explicit DNS type allowlist. Plan and apply remain dry-run by default; only `--execute` writes, and non-TXT records require exact canonical record confirmation after explicit user authorization.
 - Added credential-free GitHub Actions CI for Ruff, offline tests, and bytecode compilation.
 
+### 2026-07-30
+
+- Made `GODADDY_WRITE_PAT` optional. When it is absent, `dns create apply --execute` falls back to `GODADDY_PAT`, so a single token with `domains.domain:read` and `domains.dns:update` is sufficient for both reads and writes. A separate write PAT remains the recommended least-privilege deployment.
+- Updated the CLI fallback, the two offline CLI tests (one now verifies the read-token fallback path and the write client receives the read token; the other verifies both-absent still fails with exit 3), and the product, RFC, test, skill, and AGENTS docs.
+
 ### 2026-07-27
 
 - Accepted GoDaddy DNS create responses that return HTTP 201 without a `recordId`, as observed in production for a CNAME create.

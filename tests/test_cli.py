@@ -31,8 +31,66 @@ def test_auth_status_does_not_print_token(monkeypatch, capsys):
     assert body["data"] == {"present": True, "source": "environment", "live": False}
 
 
-def test_execute_requires_write_token_not_read_token(monkeypatch, capsys):
+def test_execute_falls_back_to_read_token_when_write_token_absent(monkeypatch, tmp_path, capsys):
     monkeypatch.setenv("GODADDY_PAT", "read-token")
+    monkeypatch.delenv("GODADDY_WRITE_PAT", raising=False)
+    plan_path, plan = _write_a_plan(tmp_path)
+    monkeypatch.setattr(cli, "GoDaddyClient", _FakeApplyClient)
+    monkeypatch.setattr(cli, "resolve_nameservers", lambda domain: ["ns1.example.net"])
+    monkeypatch.setattr(cli, "require_matching_authority", lambda account, live: None)
+
+    constructed_tokens = []
+    real_init = cli.GoDaddyDNSWriteClient.__init__
+
+    def capture_init(self, token, **kwargs):
+        constructed_tokens.append(token)
+        real_init(self, token, **kwargs)
+
+    created_record = {**plan["record"], "recordId": "new-id"}
+    call_state = {"dns_list_calls": 0}
+
+    def fake_list_dns_records(self, domain, *, record_type, name):
+        call_state["dns_list_calls"] += 1
+        if call_state["dns_list_calls"] == 1:
+            return [], {"complete": True}
+        return [created_record], {"complete": True}
+
+    monkeypatch.setattr(cli.GoDaddyDNSWriteClient, "__init__", capture_init)
+    monkeypatch.setattr(
+        cli.GoDaddyDNSWriteClient,
+        "create_record",
+        lambda self, zone, record: {
+            "record": {**record, "recordId": "new-id"},
+            "headers": {},
+            "request_id": "req",
+        },
+    )
+    monkeypatch.setattr(_FakeApplyClient, "list_dns_records", fake_list_dns_records)
+
+    assert (
+        cli.main(
+            [
+                "dns",
+                "create",
+                "apply",
+                str(plan_path),
+                "--confirm-domain",
+                "example.com",
+                "--confirm-record",
+                record_confirmation(plan["record"]),
+                "--execute",
+            ]
+        )
+        == 0
+    )
+
+    assert constructed_tokens == ["read-token"]
+    output = json.loads(capsys.readouterr().out)
+    assert output["data"]["verified"] is True
+
+
+def test_execute_requires_some_token_when_both_absent(monkeypatch, capsys):
+    monkeypatch.delenv("GODADDY_PAT", raising=False)
     monkeypatch.delenv("GODADDY_WRITE_PAT", raising=False)
 
     assert (
@@ -53,7 +111,7 @@ def test_execute_requires_write_token_not_read_token(monkeypatch, capsys):
     error = json.loads(capsys.readouterr().err)
     assert error["command"] == "dns.create.apply"
     assert error["error"]["kind"] == "authentication"
-    assert "GODADDY_WRITE_PAT" in error["error"]["message"]
+    assert "GODADDY_WRITE_PAT and GODADDY_PAT" in error["error"]["message"]
 
 
 def test_apply_without_execute_uses_read_token(monkeypatch, tmp_path, capsys):
